@@ -4,7 +4,8 @@ use crate::state::{LidState, PowerSource};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU8, Ordering};
 
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Foundation::{HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Power::{
     GetSystemPowerStatus, RegisterPowerSettingNotification, SetSuspendState,
     POWERBROADCAST_SETTING, SYSTEM_POWER_STATUS,
@@ -97,14 +98,20 @@ fn get_current_tooltip() -> String {
 }
 
 fn add_tray_icon(hwnd: HWND) {
-    let icon = unsafe { LoadIconW(None, IDI_SHIELD).or_else(|_| LoadIconW(None, IDI_APPLICATION)) };
+    let icon = unsafe {
+        let hinstance = GetModuleHandleW(None).ok().map(|h| HINSTANCE(h.0));
+        hinstance
+            .and_then(|h| LoadIconW(h, PCWSTR(1 as _)).ok())
+            .or_else(|| LoadIconW(None, IDI_SHIELD).ok())
+            .or_else(|| LoadIconW(None, IDI_APPLICATION).ok())
+    };
     let mut nid = NOTIFYICONDATAW::default();
     nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
     nid.hWnd = hwnd;
     nid.uID = 1;
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_TRAYICON;
-    if let Ok(icon) = icon {
+    if let Some(icon) = icon {
         nid.hIcon = icon;
     }
     let tip_text = get_current_tooltip();
