@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/sleepsafe_256.png" width="160" alt="SleepSafe Logo" />
+</p>
+
 # SleepSafe
 
 > Intelligent thermal and closed-lid sleep protection for Windows laptops.
@@ -18,9 +22,10 @@ If you unplug your laptop while the lid is already closed and slip it into a bac
 ---
 
 ## Features
+- **Native System Tray Integration:** Sits quietly beside the clock with custom shield icon, live tooltips, sensor diagnostics, and instant context controls (view live logs, open config folder, pause/resume, and exit).
 - **Ultra-lightweight:** Written in pure Rust with native Win32 APIs (no heavy runtime, < 8 MB RAM, 0% CPU at idle).
-- **Customizable Thresholds:** JSON-based configuration for thermal limits, grace periods, and polling intervals.
-- **Automated Windows Installer:** Clean installer created with Inno Setup, supporting auto-start on Windows boot.
+- **Customizable Thresholds:** JSON-based configuration (`%APPDATA%\SleepSafe\config.json`) for thermal limits, grace periods, and polling intervals.
+- **Embedded Windows Metadata:** Complete multi-resolution icon resources (16x16 to 256x256) and official Windows VersionInfo properties.
 
 ---
 
