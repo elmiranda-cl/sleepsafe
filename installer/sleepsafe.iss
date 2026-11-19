@@ -5,7 +5,7 @@
 
 #define MyAppName "SleepSafe"
 #define MyAppVersion "0.1.0"
-#define MyAppPublisher "CIAE"
+#define MyAppPublisher "elmiranda-cl"
 #define MyAppURL "https://github.com/ciae/sleepsafe"
 #define MyAppExeName "sleepsafe.exe"
 

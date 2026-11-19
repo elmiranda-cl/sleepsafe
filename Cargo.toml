@@ -2,7 +2,7 @@
 name = "sleepsafe"
 version = "0.1.0"
 edition = "2021"
-authors = ["CIAE"]
+authors = ["elmiranda-cl"]
 description = "Intelligent thermal and closed-lid sleep protection for Windows laptops"
 license = "MIT"
 repository = "https://github.com/ciae/sleepsafe"
