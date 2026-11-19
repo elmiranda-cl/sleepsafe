@@ -45,4 +45,4 @@ The compiled executable will be located at `target/release/sleepsafe.exe`.
 ---
 
 ## License
-MIT License - Developed by Cristian Miranda (elmiranda-cl).
+MIT License - Developed by elmiranda-cl.
