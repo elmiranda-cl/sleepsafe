@@ -61,14 +61,43 @@ impl Config {
         let path = Self::config_path();
         if path.exists() {
             if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(cfg) = serde_json::from_str(&content) {
+                if let Ok(mut cfg) = serde_json::from_str::<Config>(&content) {
+                    cfg.sanitize();
                     return cfg;
                 }
             }
         }
-        let default_cfg = Self::default();
+        let mut default_cfg = Self::default();
+        default_cfg.sanitize();
         let _ = default_cfg.save();
         default_cfg
+    }
+
+    /// Enforce safe hardware boundaries to prevent denial of service or infinite suspend loops
+    pub fn sanitize(&mut self) {
+        if self.temp_ceiling_celsius < 45.0 {
+            self.temp_ceiling_celsius = 45.0;
+        } else if self.temp_ceiling_celsius > 90.0 {
+            self.temp_ceiling_celsius = 90.0;
+        }
+
+        if self.temp_delta_celsius < 3.0 {
+            self.temp_delta_celsius = 3.0;
+        } else if self.temp_delta_celsius > 25.0 {
+            self.temp_delta_celsius = 25.0;
+        }
+
+        if self.check_interval_secs < 1 {
+            self.check_interval_secs = 1;
+        } else if self.check_interval_secs > 60 {
+            self.check_interval_secs = 60;
+        }
+
+        if self.max_timeout_secs < 30 {
+            self.max_timeout_secs = 30;
+        } else if self.max_timeout_secs > 7200 {
+            self.max_timeout_secs = 7200;
+        }
     }
 
     pub fn save(&self) -> Result<(), std::io::Error> {
