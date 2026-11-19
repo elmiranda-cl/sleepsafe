@@ -105,19 +105,29 @@ unsafe extern "system" fn power_wnd_proc(
         let setting_ptr = lparam.0 as *const POWERBROADCAST_SETTING;
         if !setting_ptr.is_null() {
             let setting = &*setting_ptr;
+            let val = *(setting.Data.as_ptr() as *const u32);
+
             if setting.PowerSetting == GUID_LIDSWITCH_STATE_CHANGE {
-                let data = setting.Data[0];
-                GLOBAL_LID_STATE.store(data, Ordering::SeqCst);
+                // 0 = Closed, 1 = Open (DWORD)
+                let state = if val == 0 { 0 } else { 1 };
+                GLOBAL_LID_STATE.store(state, Ordering::SeqCst);
                 log_info!(
                     "Win32 Power Event: Lid state changed to {}",
-                    if data == 0 { "CLOSED" } else { "OPEN" }
+                    if state == 0 { "CLOSED" } else { "OPEN" }
                 );
             } else if setting.PowerSetting == GUID_ACDC_POWER_SOURCE {
-                let data = setting.Data[0];
-                GLOBAL_POWER_STATE.store(data, Ordering::SeqCst);
+                // Win32 SYSTEM_POWER_CONDITION enum:
+                // PoAc = 0 (AC connected)
+                // PoDc = 1 (DC / Battery active)
+                // PoHot = 2 (Hot-swap battery)
+                let state = match val {
+                    0 => 1, // 1 = Ac in our internal state
+                    _ => 0, // 0 = Battery in our internal state
+                };
+                GLOBAL_POWER_STATE.store(state, Ordering::SeqCst);
                 log_info!(
                     "Win32 Power Event: Power source changed to {}",
-                    if data == 1 { "AC" } else { "BATTERY" }
+                    if state == 1 { "AC" } else { "BATTERY" }
                 );
             }
         }
