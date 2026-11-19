@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 pub mod config;
+pub mod logger;
 pub mod platform;
 pub mod state;
 pub mod watchdog;
@@ -35,13 +36,23 @@ fn acquire_single_instance_lock() -> bool {
 
 fn main() {
     if !acquire_single_instance_lock() {
-        eprintln!("[SleepSafe] Another instance of SleepSafe is already running.");
+        log_warn!("Another instance of SleepSafe is already running. Exiting cleanly.");
         return;
     }
+
+    log_info!("SleepSafe started. Initializing configuration and hardware providers.");
 
     let config = Config::load();
     let provider = DefaultProvider::new();
     let mut engine = WatchdogEngine::new(config.clone());
+
+    log_info!(
+        "Active Configuration: Ceiling: {:.1}°C, Delta: +{:.1}°C, MaxTimeout: {}s, PollingInterval: {}s",
+        config.temp_ceiling_celsius,
+        config.temp_delta_celsius,
+        config.max_timeout_secs,
+        config.check_interval_secs
+    );
 
     loop {
         let power = provider.get_power_source();
@@ -52,13 +63,33 @@ fn main() {
         let action = engine.tick(power, lid, ext_display, temp);
 
         match action {
-            WatchdogAction::StartMonitoring { .. } => {}
-            WatchdogAction::CancelMonitoring { .. } => {}
-            WatchdogAction::TriggerSuspend(reason) => {
-                eprintln!("[SleepSafe] Suspending system: {}", reason);
-                let _ = provider.suspend_system();
+            WatchdogAction::StartMonitoring { baseline_temp } => {
+                log_alert!(
+                    "Charger disconnected with lid CLOSED. Starting thermal slope watchdog. Baseline: {:.1}°C",
+                    baseline_temp
+                );
             }
-            WatchdogAction::None => {}
+            WatchdogAction::CancelMonitoring { reason } => {
+                log_info!("Watchdog monitoring canceled: {}", reason);
+            }
+            WatchdogAction::TriggerSuspend(reason) => {
+                log_alert!("CRITICAL ACTION TRIGGERED: {}. Suspending system NOW.", reason);
+                if let Err(e) = provider.suspend_system() {
+                    log_warn!("Failed to suspend system: {}", e);
+                }
+            }
+            WatchdogAction::None => {
+                if engine.is_monitoring {
+                    log_info!(
+                        "Watchdog tick: Temp={:.1}°C (baseline={:.1}°C, delta=+{:.1}°C), Elapsed={}s/{}s",
+                        temp,
+                        engine.baseline_temp,
+                        temp - engine.baseline_temp,
+                        engine.elapsed_secs,
+                        config.max_timeout_secs
+                    );
+                }
+            }
         }
 
         thread::sleep(Duration::from_secs(config.check_interval_secs));
