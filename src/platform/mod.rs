@@ -6,6 +6,10 @@ pub trait SystemProvider {
     fn has_external_display(&self) -> bool;
     fn get_cpu_temp(&self) -> Option<f32>;
     fn suspend_system(&self) -> Result<(), String>;
+    fn is_paused(&self) -> bool {
+        false
+    }
+    fn update_status(&self, _temp: f32, _is_monitoring: bool) {}
 }
 
 #[cfg(windows)]

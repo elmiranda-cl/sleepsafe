@@ -18,10 +18,17 @@ fn acquire_single_instance_lock() -> bool {
     use windows::core::w;
     use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
     use windows::Win32::System::Threading::CreateMutexW;
+    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
 
     unsafe {
         let mutex = CreateMutexW(None, true, w!("Local\\SleepSafe_SingleInstance_Mutex"));
         if GetLastError() == ERROR_ALREADY_EXISTS {
+            let _ = MessageBoxW(
+                None,
+                w!("SleepSafe ya se encuentra en ejecución en segundo plano.\n\nPuedes ver su estado o configurar opciones haciendo clic en el icono de escudo junto al reloj (bandeja del sistema)."),
+                w!("SleepSafe ya está activo"),
+                MB_OK | MB_ICONINFORMATION,
+            );
             return false;
         }
         std::mem::forget(mutex);
@@ -55,12 +62,18 @@ fn main() {
     );
 
     loop {
+        // Sync pause state from user interaction (e.g. System Tray menu)
+        engine.set_paused(provider.is_paused());
+
         let power = provider.get_power_source();
         let lid = provider.get_lid_state();
         let ext_display = provider.has_external_display();
         let temp = provider.get_cpu_temp().unwrap_or(40.0);
 
         let action = engine.tick(power, lid, ext_display, temp);
+
+        // Update System Tray icon status and tooltip
+        provider.update_status(temp, engine.is_monitoring);
 
         match action {
             WatchdogAction::StartMonitoring { baseline_temp } => {
