@@ -6,7 +6,7 @@
 #define MyAppName "SleepSafe"
 #define MyAppVersion "0.1.0"
 #define MyAppPublisher "elmiranda-cl"
-#define MyAppURL "https://github.com/ciae/sleepsafe"
+#define MyAppURL "https://github.com/elmiranda-cl/sleepsafe"
 #define MyAppExeName "sleepsafe.exe"
 
 [Setup]
@@ -20,6 +20,8 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={localappdata}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
+CloseApplications=yes
+RestartApplications=yes
 OutputDir=dist
 OutputBaseFilename=SleepSafe-Setup-v{#MyAppVersion}
 Compression=lzma2/max

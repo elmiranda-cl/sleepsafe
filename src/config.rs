@@ -107,7 +107,14 @@ impl Config {
         }
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        fs::write(path, json)?;
+        
+        // Atomic save pattern to prevent file corruption during sudden power loss
+        let tmp_path = path.with_extension("tmp");
+        fs::write(&tmp_path, json)?;
+        if let Err(_) = fs::rename(&tmp_path, &path) {
+            let _ = fs::remove_file(&path);
+            fs::rename(&tmp_path, &path)?;
+        }
         Ok(())
     }
 }
