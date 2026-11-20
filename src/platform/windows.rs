@@ -10,6 +10,10 @@ use windows::Win32::System::Power::{
     GetSystemPowerStatus, RegisterPowerSettingNotification, SetSuspendState,
     POWERBROADCAST_SETTING, SYSTEM_POWER_STATUS,
 };
+use windows::Win32::System::Registry::{
+    RegCloseKey, RegDeleteValueW, RegOpenKeyExW, RegSetValueExW, HKEY_CURRENT_USER, KEY_SET_VALUE,
+    REG_SZ,
+};
 use windows::Win32::System::SystemServices::{
     GUID_ACDC_POWER_SOURCE, GUID_LIDSWITCH_STATE_CHANGE,
 };
@@ -22,9 +26,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetMessageW, GetSystemMetrics, LoadIconW, MessageBoxW, PostMessageW,
     RegisterWindowMessageW, SetForegroundWindow, TrackPopupMenu, DEVICE_NOTIFY_WINDOW_HANDLE,
     IDI_APPLICATION, IDI_SHIELD, MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND, MB_TOPMOST,
-    MF_GRAYED, MF_SEPARATOR, MF_STRING, PBT_POWERSETTINGCHANGE, SM_CMONITORS, SW_SHOW,
-    TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP, WM_DESTROY, WM_ENDSESSION,
-    WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_POWERBROADCAST, WM_RBUTTONUP, WNDCLASSW,
+    MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING, MF_UNCHECKED, PBT_POWERSETTINGCHANGE,
+    SM_CMONITORS, SW_SHOW, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP, WM_DESTROY,
+    WM_ENDSESSION, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_POWERBROADCAST, WM_RBUTTONUP, WNDCLASSW,
 };
 
 // Global atomics updated by native Win32 power broadcast events:
@@ -54,7 +58,32 @@ const IDM_VIEW_LOG: usize = 1002;
 const IDM_OPEN_FOLDER: usize = 1003;
 const IDM_EDIT_CONFIG: usize = 1004;
 const IDM_TOGGLE_PAUSE: usize = 1005;
-const IDM_EXIT: usize = 1006;
+const IDM_AUTOSTART: usize = 1006;
+const IDM_EXIT: usize = 1007;
+
+pub fn sync_autostart_registry(enable: bool) {
+    unsafe {
+        let subkey = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
+        let mut hkey = windows::Win32::System::Registry::HKEY::default();
+        if RegOpenKeyExW(HKEY_CURRENT_USER, subkey, 0, KEY_SET_VALUE, &mut hkey).is_ok() {
+            let value_name = w!("SleepSafe");
+            if enable {
+                if let Ok(exe_path) = std::env::current_exe() {
+                    let formatted = format!("\"{}\"", exe_path.to_string_lossy());
+                    let wide_val: Vec<u16> = formatted.encode_utf16().chain(std::iter::once(0)).collect();
+                    let bytes = std::slice::from_raw_parts(
+                        wide_val.as_ptr() as *const u8,
+                        wide_val.len() * 2,
+                    );
+                    let _ = RegSetValueExW(hkey, value_name, 0, REG_SZ, Some(bytes));
+                }
+            } else {
+                let _ = RegDeleteValueW(hkey, value_name);
+            }
+            let _ = RegCloseKey(hkey);
+        }
+    }
+}
 
 fn to_wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -443,6 +472,22 @@ unsafe extern "system" fn power_wnd_proc(
 
                 let _ = AppendMenuW(hmenu, MF_SEPARATOR, 0, None);
 
+                let cfg = crate::config::Config::load();
+                let autostart_flag = if cfg.auto_start_with_windows {
+                    MF_CHECKED
+                } else {
+                    MF_UNCHECKED
+                };
+                let autostart_label = to_wide("🚀 Iniciar automáticamente con Windows");
+                let _ = AppendMenuW(
+                    hmenu,
+                    autostart_flag | MF_STRING,
+                    IDM_AUTOSTART,
+                    PCWSTR(autostart_label.as_ptr()),
+                );
+
+                let _ = AppendMenuW(hmenu, MF_SEPARATOR, 0, None);
+
                 let exit_label = to_wide("❌ Salir de SleepSafe");
                 let _ = AppendMenuW(hmenu, MF_STRING, IDM_EXIT, PCWSTR(exit_label.as_ptr()));
 
@@ -526,6 +571,16 @@ unsafe extern "system" fn power_wnd_proc(
                             }
                         );
                         update_tray_tooltip_dynamic();
+                    }
+                    IDM_AUTOSTART => {
+                        let mut cfg = crate::config::Config::load();
+                        cfg.auto_start_with_windows = !cfg.auto_start_with_windows;
+                        let _ = cfg.save();
+                        sync_autostart_registry(cfg.auto_start_with_windows);
+                        log_info!(
+                            "Auto-start with Windows toggled to: {}",
+                            cfg.auto_start_with_windows
+                        );
                     }
                     IDM_EXIT => {
                         remove_tray_icon();
