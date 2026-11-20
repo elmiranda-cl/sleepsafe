@@ -22,10 +22,26 @@ If you unplug your laptop while the lid is already closed and slip it into a bac
 ---
 
 ## Features
-- **Native System Tray Integration:** Sits quietly beside the clock with custom shield icon, live tooltips, sensor diagnostics, and instant context controls (view live logs, open config folder, pause/resume, and exit).
+- **Native System Tray Integration:** Sits quietly beside the clock with custom shield icon, live tooltips, sensor diagnostics, and instant context controls (view live logs, open config folder, pause/resume, toggle auto-start, and exit).
+- **Auto-Start with Windows:** Easily toggled directly from the tray icon or config file, automatically syncing with `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
 - **Ultra-lightweight:** Written in pure Rust with native Win32 APIs (no heavy runtime, < 8 MB RAM, 0% CPU at idle).
 - **Customizable Thresholds:** JSON-based configuration (`%APPDATA%\SleepSafe\config.json`) for thermal limits, grace periods, and polling intervals.
 - **Embedded Windows Metadata:** Complete multi-resolution icon resources (16x16 to 256x256) and official Windows VersionInfo properties.
+
+---
+
+## Installation
+
+### Option 1: Standalone Installer (Recommended)
+Download `sleepsafe-setup.exe` from the latest [GitHub Releases](https://github.com/elmiranda-cl/sleepsafe/releases/latest). Run it to install SleepSafe in your user directory and enable auto-start on Windows boot.
+
+### Option 2: Portable Executable
+Download `sleepsafe.exe` directly, place it anywhere you like, and run it. You can toggle "Start automatically with Windows" directly from the system tray menu.
+
+### Option 3: Winget (Windows Package Manager)
+```cmd
+winget install elmiranda-cl.SleepSafe
+```
 
 ---
 

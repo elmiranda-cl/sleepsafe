@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+
+PackageIdentifier: elmiranda-cl.SleepSafe
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: elmiranda-cl
+PublisherUrl: https://github.com/elmiranda-cl
+PublisherSupportUrl: https://github.com/elmiranda-cl/sleepsafe/issues
+Author: elmiranda-cl
+PackageName: SleepSafe
+PackageUrl: https://github.com/elmiranda-cl/sleepsafe
+License: MIT
+LicenseUrl: https://github.com/elmiranda-cl/sleepsafe/blob/main/LICENSE
+Copyright: Copyright (c) 2026 elmiranda-cl
+ShortDescription: Intelligent thermal and closed-lid sleep protection for Windows laptops to prevent Backpack Oven Syndrome.
+Description: |
+  SleepSafe is an ultra-lightweight Windows utility that prevents laptops from overheating inside backpacks.
+  When a laptop is unplugged while the lid is already closed, Windows Modern Standby often fails to sleep properly, turning the machine into a hot oven.
+  SleepSafe monitors the thermal gradient and lid sensor, allowing safe docking with external monitors, but immediately suspending the laptop if trapped inside a bag or exceeding safe temperatures.
+Moniker: sleepsafe
+Tags:
+- laptop
+- thermal
+- battery
+- sleep
+- standby
+- backpack
+- hardware-protection
+ReleaseNotesUrl: https://github.com/elmiranda-cl/sleepsafe/releases/tag/v0.1.0
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

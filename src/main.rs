@@ -53,6 +53,9 @@ fn main() {
     let provider = DefaultProvider::new();
     let mut engine = WatchdogEngine::new(config.clone());
 
+    #[cfg(windows)]
+    crate::platform::windows::sync_autostart_registry(config.auto_start_with_windows);
+
     log_info!(
         "Active Configuration: Ceiling: {:.1}°C, Delta: +{:.1}°C, MaxTimeout: {}s, PollingInterval: {}s",
         config.temp_ceiling_celsius,
