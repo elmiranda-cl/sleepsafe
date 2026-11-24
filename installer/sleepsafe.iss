@@ -18,7 +18,6 @@ AppUpdatesURL={#MyAppURL}/releases
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
 DefaultGroupName={#MyAppName}
-LicenseFile=..\LICENSE
 OutputDir=..\dist
 OutputBaseFilename=sleepsafe-setup
 SetupIconFile=..\assets\sleepsafe.ico
@@ -42,7 +41,6 @@ Name: "autostart"; Description: "Iniciar SleepSafe automáticamente al encender 
 Source: "..\target\x86_64-pc-windows-msvc\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\sleepsafe.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\sleepsafe.ico"
