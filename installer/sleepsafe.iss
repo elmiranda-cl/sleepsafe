@@ -2,7 +2,7 @@
 ; Compatible with Inno Setup 6.x
 
 #define MyAppName "SleepSafe"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.1.2"
 #define MyAppPublisher "elmiranda-cl"
 #define MyAppURL "https://github.com/elmiranda-cl/sleepsafe"
 #define MyAppExeName "sleepsafe.exe"
@@ -28,6 +28,13 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
+CreateUninstallRegKey=yes
+Uninstallable=yes
+UninstallDisplayName={#MyAppName}
+UninstallDisplayIcon={app}\assets\sleepsafe.ico
+CloseApplications=yes
+CloseApplicationsFilter={#MyAppExeName}
+RestartApplications=no
 
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
@@ -52,3 +59,9 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "taskkill"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden; RunOnceId: "StopSleepSafeOnUninstall"
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"

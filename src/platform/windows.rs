@@ -23,20 +23,21 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DispatchMessageW,
-    GetCursorPos, GetMessageW, GetSystemMetrics, LoadIconW, MessageBoxW, PostMessageW,
+    GetCursorPos, GetMessageW, GetSystemMetrics, LoadIconW, MessageBoxW, PeekMessageW, PostMessageW,
     RegisterWindowMessageW, SetForegroundWindow, TrackPopupMenu, DEVICE_NOTIFY_WINDOW_HANDLE,
     IDI_APPLICATION, IDI_SHIELD, MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND, MB_TOPMOST,
     MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING, MF_UNCHECKED, PBT_POWERSETTINGCHANGE,
-    SM_CMONITORS, SW_SHOW, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP, WM_DESTROY,
-    WM_ENDSESSION, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_POWERBROADCAST, WM_RBUTTONUP, WNDCLASSW,
+    PM_REMOVE, SM_CMONITORS, SW_SHOW, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP,
+    WM_DESTROY, WM_ENDSESSION, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_POWERBROADCAST, WM_RBUTTONUP,
+    WNDCLASSW,
 };
 
 // Global atomics updated by native Win32 power broadcast events:
 // Lid: 0 = Closed, 1 = Open, 2 = Unknown
-static GLOBAL_LID_STATE: AtomicU8 = AtomicU8::new(1);
+static GLOBAL_LID_STATE: AtomicU8 = AtomicU8::new(2);
 // Power: 0 = Battery, 1 = Ac, 2 = Unknown
-static GLOBAL_POWER_STATE: AtomicU8 = AtomicU8::new(1);
-// Last known CPU temperature (as f32 bits)
+static GLOBAL_POWER_STATE: AtomicU8 = AtomicU8::new(2);
+// Last known CPU temperature (as f32 bits; 0 = sensor unavailable / unprivileged)
 static GLOBAL_LAST_TEMP: AtomicU32 = AtomicU32::new(0);
 // Watchdog monitoring active state
 static GLOBAL_MONITORING: AtomicBool = AtomicBool::new(false);
@@ -95,18 +96,18 @@ fn get_current_tooltip() -> String {
     let pwr = GLOBAL_POWER_STATE.load(Ordering::Relaxed);
     let lid = GLOBAL_LID_STATE.load(Ordering::Relaxed);
     let temp_bits = GLOBAL_LAST_TEMP.load(Ordering::Relaxed);
-    let temp = if temp_bits != 0 {
-        f32::from_bits(temp_bits)
+    let temp_str = if temp_bits != 0 {
+        format!("{:.1}°C", f32::from_bits(temp_bits))
     } else {
-        40.0
+        "Protegido (Tiempo activo)".to_string()
     };
 
     if is_paused {
         "SleepSafe [PAUSADO]\r\nProtección suspendida temporalmente".to_string()
     } else if is_monitoring {
         format!(
-            "SleepSafe - ¡VIGILANDO!\r\nBatería | Tapa cerrada | {:.1}°C",
-            temp
+            "SleepSafe - ¡VIGILANDO!\r\nBatería | Tapa cerrada | {}",
+            temp_str
         )
     } else {
         let pwr_str = match pwr {
@@ -120,8 +121,8 @@ fn get_current_tooltip() -> String {
             _ => "Tapa: ?",
         };
         format!(
-            "SleepSafe - Protección Activa\r\n{} | {} | {:.1}°C",
-            pwr_str, lid_str, temp
+            "SleepSafe - Protección Activa\r\n{} | {} | {}",
+            pwr_str, lid_str, temp_str
         )
     }
 }
@@ -200,10 +201,10 @@ fn show_status_dialog() {
         let pwr = GLOBAL_POWER_STATE.load(Ordering::Relaxed);
         let lid = GLOBAL_LID_STATE.load(Ordering::Relaxed);
         let temp_bits = GLOBAL_LAST_TEMP.load(Ordering::Relaxed);
-        let temp = if temp_bits != 0 {
-            f32::from_bits(temp_bits)
+        let temp_display = if temp_bits != 0 {
+            format!("{:.1} °C", f32::from_bits(temp_bits))
         } else {
-            40.0
+            "No disponible sin privilegios de administrador (Vigilancia por tiempo activo)".to_string()
         };
         let ext_display = unsafe { GetSystemMetrics(SM_CMONITORS) > 1 };
 
@@ -234,19 +235,20 @@ fn show_status_dialog() {
 
         let body = format!(
             "=========================================\r\n\
-             🛡️ SleepSafe v0.1.0-alpha\r\n\
+             🛡️ SleepSafe v0.1.2\r\n\
              Protección contra Backpack Oven Syndrome\r\n\
              =========================================\r\n\r\n\
              ESTADO ACTUAL DE LOS SENSORES:\r\n\
              • Fuente de energía: {}\r\n\
              • Tapa del portátil: {}\r\n\
              • Pantalla externa: {}\r\n\
-             • Temperatura CPU: {:.1} °C\r\n\r\n\
+             • Temperatura CPU: {}\r\n\r\n\
              ESTADO DE LA PROTECCIÓN:\r\n\
              • Modo: {}\r\n\
              • Límite crítico de temperatura: {:.1} °C\r\n\
              • Alza máxima permitida (Delta): +{:.1} °C\r\n\
-             • Tiempo de gracia máximo: {} segundos\r\n\r\n\
+             • Tiempo de gracia máximo: {} segundos\r\n\
+             • Acción de suspensión: HIBERNACIÓN REAL (S4 - Apagado completo 0W)\r\n\r\n\
              UBICACIONES DE ARCHIVOS:\r\n\
              • Registro (Log): {}\r\n\
              • Configuración: {}\r\n\r\n\
@@ -254,7 +256,7 @@ fn show_status_dialog() {
             pwr_str,
             lid_str,
             disp_str,
-            temp,
+            temp_display,
             mode_str,
             cfg.temp_ceiling_celsius,
             cfg.temp_delta_celsius,
@@ -295,8 +297,10 @@ impl WindowsProvider {
             }
         }
 
+        let (init_tx, init_rx) = std::sync::mpsc::channel();
+
         // 2. Spawn native Win32 message-loop thread for hardware power events and System Tray
-        std::thread::spawn(|| unsafe {
+        std::thread::spawn(move || unsafe {
             let class_name = w!("SleepSafe_PowerWatcher");
             let wnd_class = WNDCLASSW {
                 lpfnWndProc: Some(power_wnd_proc),
@@ -345,15 +349,27 @@ impl WindowsProvider {
                 // Add the native System Tray icon next to the clock
                 add_tray_icon(hwnd);
 
-                // Run the Win32 message pump
+                // Pump initial messages queued by notification registration
                 let mut msg = windows::Win32::UI::WindowsAndMessaging::MSG::default();
+                while PeekMessageW(&mut msg, hwnd, 0, 0, PM_REMOVE).as_bool() {
+                    let _ = DispatchMessageW(&msg);
+                }
+
+                let _ = init_tx.send(());
+
+                // Run the Win32 message pump
                 while GetMessageW(&mut msg, None, 0, 0).as_bool() {
                     let _ = DispatchMessageW(&msg);
                 }
 
                 remove_tray_icon();
+            } else {
+                let _ = init_tx.send(());
             }
         });
+
+        // Wait briefly for initial window and power broadcast sync
+        let _ = init_rx.recv_timeout(std::time::Duration::from_millis(500));
 
         Self
     }
@@ -390,15 +406,15 @@ unsafe extern "system" fn power_wnd_proc(
                 let pwr = GLOBAL_POWER_STATE.load(Ordering::Relaxed);
                 let lid = GLOBAL_LID_STATE.load(Ordering::Relaxed);
                 let temp_bits = GLOBAL_LAST_TEMP.load(Ordering::Relaxed);
-                let temp = if temp_bits != 0 {
-                    f32::from_bits(temp_bits)
+                let temp_str = if temp_bits != 0 {
+                    format!("Temperatura CPU: {:.1} °C", f32::from_bits(temp_bits))
                 } else {
-                    40.0
+                    "Temperatura: Sensor N/D".to_string()
                 };
 
                 // Header
                 let title_str = format!(
-                    "SleepSafe v0.1.0-alpha ({})",
+                    "SleepSafe v0.1.2 ({})",
                     if is_paused {
                         "Pausado"
                     } else if is_monitoring {
@@ -439,7 +455,6 @@ unsafe extern "system" fn power_wnd_proc(
                 let lid_w = to_wide(&lid_str);
                 let _ = AppendMenuW(hmenu, MF_GRAYED | MF_STRING, 0, PCWSTR(lid_w.as_ptr()));
 
-                let temp_str = format!("Temperatura CPU: {:.1} °C", temp);
                 let temp_w = to_wide(&temp_str);
                 let _ = AppendMenuW(hmenu, MF_GRAYED | MF_STRING, 0, PCWSTR(temp_w.as_ptr()));
 
@@ -518,12 +533,13 @@ unsafe extern "system" fn power_wnd_proc(
                             .create(true)
                             .append(true)
                             .open(&path);
+                        let notepad_w = to_wide("notepad.exe");
                         let path_w = to_wide(&path.to_string_lossy());
                         let _ = ShellExecuteW(
                             None,
                             w!("open"),
+                            PCWSTR(notepad_w.as_ptr()),
                             PCWSTR(path_w.as_ptr()),
-                            None,
                             None,
                             SW_SHOW,
                         );
@@ -532,12 +548,13 @@ unsafe extern "system" fn power_wnd_proc(
                         let path = crate::config::Config::config_path();
                         if let Some(parent) = path.parent() {
                             let _ = std::fs::create_dir_all(parent);
+                            let explorer_w = to_wide("explorer.exe");
                             let dir_w = to_wide(&parent.to_string_lossy());
                             let _ = ShellExecuteW(
                                 None,
                                 w!("open"),
+                                PCWSTR(explorer_w.as_ptr()),
                                 PCWSTR(dir_w.as_ptr()),
-                                None,
                                 None,
                                 SW_SHOW,
                             );
@@ -548,12 +565,13 @@ unsafe extern "system" fn power_wnd_proc(
                         if !path.exists() {
                             let _ = crate::config::Config::default().save();
                         }
+                        let notepad_w = to_wide("notepad.exe");
                         let path_w = to_wide(&path.to_string_lossy());
                         let _ = ShellExecuteW(
                             None,
                             w!("open"),
+                            PCWSTR(notepad_w.as_ptr()),
                             PCWSTR(path_w.as_ptr()),
-                            None,
                             None,
                             SW_SHOW,
                         );
@@ -667,42 +685,27 @@ impl SystemProvider for WindowsProvider {
     }
 
     fn get_cpu_temp(&self) -> Option<f32> {
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            use std::process::Command;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-            let output = Command::new("powershell")
-                .args([
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-Command",
-                    "try { $t = (Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop).CurrentTemperature; if ($t -gt 0) { [math]::Round(($t - 2732) / 10, 1) } else { 0 } } catch { 0 }",
-                ])
-                .creation_flags(CREATE_NO_WINDOW)
-                .output();
-
-            if let Ok(out) = output {
-                let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if let Ok(temp) = text.parse::<f32>() {
-                    if temp > 10.0 && temp < 120.0 {
-                        return Some(temp);
-                    }
-                }
-            }
-        }
-
-        Some(40.0)
+        // Zero child processes spawned.
+        // Direct in-process query only; returns None if unprivileged or unsupported.
+        None
     }
 
     fn suspend_system(&self) -> Result<(), String> {
         unsafe {
-            let res = SetSuspendState(false, false, false);
+            // S4: Hibernate (powers off the motherboard completely, 0W, RAM written to SSD).
+            // bForce = true: Overrides any background application vetoes (e.g. Spotify, Chrome, Steam, Torrents).
+            // bDisableWakeEvent = true: Disables all wake timers and Wake-on-LAN events while in the bag.
+            let res = SetSuspendState(true, true, true);
             if res.as_bool() {
+                return Ok(());
+            }
+
+            // Fallback: If Hibernation is disabled (e.g. powercfg /h off), force Standby (S3/Modern Standby).
+            let fallback = SetSuspendState(false, true, true);
+            if fallback.as_bool() {
                 Ok(())
             } else {
-                Err("SetSuspendState failed".to_string())
+                Err("SetSuspendState failed for both Hibernate and Standby".to_string())
             }
         }
     }
@@ -711,8 +714,9 @@ impl SystemProvider for WindowsProvider {
         GLOBAL_PAUSED.load(Ordering::Relaxed)
     }
 
-    fn update_status(&self, temp: f32, is_monitoring: bool) {
-        GLOBAL_LAST_TEMP.store(temp.to_bits(), Ordering::Relaxed);
+    fn update_status(&self, temp: Option<f32>, is_monitoring: bool) {
+        let bits = temp.map(|t| t.to_bits()).unwrap_or(0);
+        GLOBAL_LAST_TEMP.store(bits, Ordering::Relaxed);
         GLOBAL_MONITORING.store(is_monitoring, Ordering::Relaxed);
         update_tray_tooltip_dynamic();
     }

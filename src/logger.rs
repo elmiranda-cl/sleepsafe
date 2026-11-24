@@ -32,7 +32,10 @@ pub fn log_path() -> PathBuf {
 }
 
 pub fn log(level: &str, message: &str) {
-    let _guard = LOG_MUTEX.lock().unwrap();
+    let _guard = match LOG_MUTEX.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
 
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -49,15 +52,20 @@ pub fn log(level: &str, message: &str) {
         let _ = fs::create_dir_all(parent);
     }
 
-    // Cap log size at 1 MB to prevent unbounded disk usage
+    // Rotate log file at 1 MB to prevent unbounded disk usage while preserving forensic history
     if let Ok(metadata) = fs::metadata(&path) {
         if metadata.len() > 1024 * 1024 {
-            let _ = fs::remove_file(&path);
+            let old_path = path.with_extension("log.old");
+            let _ = fs::remove_file(&old_path);
+            let _ = fs::rename(&path, &old_path);
         }
     }
 
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&path) {
         let _ = file.write_all(line.as_bytes());
+        if level == "ALERT" {
+            let _ = file.sync_all();
+        }
     }
 }
 

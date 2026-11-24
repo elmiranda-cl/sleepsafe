@@ -14,9 +14,9 @@ use std::time::Duration;
 use watchdog::WatchdogEngine;
 
 #[cfg(windows)]
-fn acquire_single_instance_lock() -> bool {
+fn acquire_single_instance_lock() -> Option<windows::Win32::Foundation::HANDLE> {
     use windows::core::w;
-    use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+    use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, HANDLE};
     use windows::Win32::System::Threading::CreateMutexW;
     use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
 
@@ -29,25 +29,30 @@ fn acquire_single_instance_lock() -> bool {
                 w!("SleepSafe ya está activo"),
                 MB_OK | MB_ICONINFORMATION,
             );
-            return false;
+            return None;
         }
-        std::mem::forget(mutex);
-        true
+        match mutex {
+            Ok(h) => Some(h),
+            Err(_) => None,
+        }
     }
 }
 
 #[cfg(not(windows))]
-fn acquire_single_instance_lock() -> bool {
-    true
+fn acquire_single_instance_lock() -> Option<()> {
+    Some(())
 }
 
 fn main() {
-    if !acquire_single_instance_lock() {
-        log_warn!("Another instance of SleepSafe is already running. Exiting cleanly.");
-        return;
-    }
+    let _instance_guard = match acquire_single_instance_lock() {
+        Some(guard) => guard,
+        None => {
+            log_warn!("Another instance of SleepSafe is already running. Exiting cleanly.");
+            return;
+        }
+    };
 
-    log_info!("SleepSafe started. Initializing configuration and hardware providers.");
+    log_info!("SleepSafe v0.1.2 started. Initializing configuration and hardware providers.");
 
     let config = Config::load();
     let provider = DefaultProvider::new();
@@ -71,7 +76,7 @@ fn main() {
         let power = provider.get_power_source();
         let lid = provider.get_lid_state();
         let ext_display = provider.has_external_display();
-        let temp = provider.get_cpu_temp().unwrap_or(40.0);
+        let temp = provider.get_cpu_temp();
 
         let action = engine.tick(power, lid, ext_display, temp);
 
@@ -80,30 +85,44 @@ fn main() {
 
         match action {
             WatchdogAction::StartMonitoring { baseline_temp } => {
-                log_alert!(
-                    "Charger disconnected with lid CLOSED. Starting thermal slope watchdog. Baseline: {:.1}°C",
-                    baseline_temp
-                );
+                match baseline_temp {
+                    Some(t) => log_alert!(
+                        "Charger disconnected with lid CLOSED. Starting thermal slope watchdog. Baseline: {:.1}°C",
+                        t
+                    ),
+                    None => log_alert!(
+                        "Charger disconnected with lid CLOSED. Thermal sensor in unprivileged mode. Safety timeout watchdog active ({}s).",
+                        config.max_timeout_secs
+                    ),
+                }
             }
             WatchdogAction::CancelMonitoring { reason } => {
                 log_info!("Watchdog monitoring canceled: {}", reason);
             }
             WatchdogAction::TriggerSuspend(reason) => {
-                log_alert!("CRITICAL ACTION TRIGGERED: {}. Suspending system NOW.", reason);
+                log_alert!("CRITICAL ACTION TRIGGERED: {}. Suspending system NOW via S4 Hibernation.", reason);
                 if let Err(e) = provider.suspend_system() {
                     log_warn!("Failed to suspend system: {}", e);
                 }
             }
             WatchdogAction::None => {
                 if engine.is_monitoring {
-                    log_info!(
-                        "Watchdog tick: Temp={:.1}°C (baseline={:.1}°C, delta=+{:.1}°C), Elapsed={}s/{}s",
-                        temp,
-                        engine.baseline_temp,
-                        temp - engine.baseline_temp,
-                        engine.elapsed_secs,
-                        config.max_timeout_secs
-                    );
+                    if let (Some(cur), Some(base)) = (temp, engine.baseline_temp) {
+                        log_info!(
+                            "Watchdog tick: Temp={:.1}°C (baseline={:.1}°C, delta=+{:.1}°C), Elapsed={}s/{}s",
+                            cur,
+                            base,
+                            cur - base,
+                            engine.elapsed_secs,
+                            config.max_timeout_secs
+                        );
+                    } else {
+                        log_info!(
+                            "Watchdog tick: Elapsed={}s/{}s (Waiting for lid open, AC power or grace timeout)",
+                            engine.elapsed_secs,
+                            config.max_timeout_secs
+                        );
+                    }
                 }
             }
         }

@@ -80,4 +80,6 @@ impl SystemProvider for MockProvider {
         println!("[MOCK/LINUX] Suspend system requested!");
         Ok(())
     }
+
+    fn update_status(&self, _temp: Option<f32>, _is_monitoring: bool) {}
 }

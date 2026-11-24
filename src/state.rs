@@ -38,7 +38,7 @@ impl std::fmt::Display for SuspendReason {
 #[derive(Debug, Clone, PartialEq)]
 pub enum WatchdogAction {
     None,
-    StartMonitoring { baseline_temp: f32 },
+    StartMonitoring { baseline_temp: Option<f32> },
     CancelMonitoring { reason: &'static str },
     TriggerSuspend(SuspendReason),
 }

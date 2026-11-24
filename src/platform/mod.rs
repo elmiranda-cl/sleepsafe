@@ -9,7 +9,7 @@ pub trait SystemProvider {
     fn is_paused(&self) -> bool {
         false
     }
-    fn update_status(&self, _temp: f32, _is_monitoring: bool) {}
+    fn update_status(&self, _temp: Option<f32>, _is_monitoring: bool) {}
 }
 
 #[cfg(windows)]

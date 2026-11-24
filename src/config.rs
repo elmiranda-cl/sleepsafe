@@ -75,13 +75,13 @@ impl Config {
 
     /// Enforce safe hardware boundaries to prevent denial of service or infinite suspend loops
     pub fn sanitize(&mut self) {
-        if self.temp_ceiling_celsius < 45.0 {
+        if self.temp_ceiling_celsius.is_nan() || self.temp_ceiling_celsius < 45.0 {
             self.temp_ceiling_celsius = 45.0;
         } else if self.temp_ceiling_celsius > 90.0 {
             self.temp_ceiling_celsius = 90.0;
         }
 
-        if self.temp_delta_celsius < 3.0 {
+        if self.temp_delta_celsius.is_nan() || self.temp_delta_celsius < 3.0 {
             self.temp_delta_celsius = 3.0;
         } else if self.temp_delta_celsius > 25.0 {
             self.temp_delta_celsius = 25.0;

@@ -2,8 +2,8 @@
 1 ICON "assets/sleepsafe.ico"
 
 1 VERSIONINFO
-FILEVERSION 0,1,0,0
-PRODUCTVERSION 0,1,0,0
+FILEVERSION 0,1,2,0
+PRODUCTVERSION 0,1,2,0
 FILEOS 0x40004
 FILETYPE 0x1
 BEGIN
@@ -13,12 +13,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "elmiranda-cl"
             VALUE "FileDescription", "SleepSafe - Thermal & Closed-Lid Protector"
-            VALUE "FileVersion", "0.1.0.0"
+            VALUE "FileVersion", "0.1.2.0"
             VALUE "InternalName", "sleepsafe"
             VALUE "LegalCopyright", "Copyright (c) 2026 elmiranda-cl"
             VALUE "OriginalFilename", "sleepsafe.exe"
             VALUE "ProductName", "SleepSafe"
-            VALUE "ProductVersion", "0.1.0.0"
+            VALUE "ProductVersion", "0.1.2.0"
         END
     END
     BLOCK "VarFileInfo"
