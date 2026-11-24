@@ -42,29 +42,38 @@ impl WatchdogEngine {
             return WatchdogAction::None;
         }
 
-        // If AC is plugged in, we do not need to monitor or suspend
-        if power == PowerSource::Ac {
+        // Backpack Oven Syndrome ONLY happens when confirmed on Battery AND confirmed Lid Closed.
+        // If AC is plugged in, or power source is unknown, do not monitor or suspend.
+        if power != PowerSource::Battery {
             if self.is_monitoring {
                 self.is_monitoring = false;
                 return WatchdogAction::CancelMonitoring {
-                    reason: "AC power connected",
+                    reason: if power == PowerSource::Ac {
+                        "AC power connected"
+                    } else {
+                        "Power source unknown or ambiguous"
+                    },
                 };
             }
             return WatchdogAction::None;
         }
 
-        // If the lid is open, user is actively using the laptop
-        if lid == LidState::Open {
+        // If the lid is open, or lid switch state is unknown, do not monitor or suspend.
+        if lid != LidState::Closed {
             if self.is_monitoring {
                 self.is_monitoring = false;
                 return WatchdogAction::CancelMonitoring {
-                    reason: "Lid opened by user",
+                    reason: if lid == LidState::Open {
+                        "Lid opened by user"
+                    } else {
+                        "Lid sensor state unknown"
+                    },
                 };
             }
             return WatchdogAction::None;
         }
 
-        // At this point: Power is Battery AND Lid is Closed
+        // At this point: Confirmed Power is Battery AND Confirmed Lid is Closed
         if !self.is_monitoring {
             self.is_monitoring = true;
             self.baseline_temp = current_temp;
@@ -74,6 +83,12 @@ impl WatchdogEngine {
             return WatchdogAction::StartMonitoring {
                 baseline_temp: current_temp,
             };
+        }
+
+        // Late latching: If baseline wasn't available at startup but sensor is now reporting
+        if self.baseline_temp.is_none() && current_temp.is_some() {
+            self.baseline_temp = current_temp;
+            self.prev_temp = current_temp;
         }
 
         // Monitoring is active: advance timer
@@ -92,14 +107,8 @@ impl WatchdogEngine {
             }
         }
 
-        // If external monitor is connected, laptop is on a desk
+        // If external monitor is connected, laptop is operating on a desk in clamshell mode
         if has_external_monitor && self.config.ignore_if_external_monitor {
-            if self.elapsed_secs >= self.config.max_timeout_secs {
-                self.is_monitoring = false;
-                return WatchdogAction::TriggerSuspend(SuspendReason::TimeoutReached {
-                    timeout_secs: self.config.max_timeout_secs,
-                });
-            }
             return WatchdogAction::None;
         }
 
@@ -281,5 +290,39 @@ mod tests {
             WatchdogAction::TriggerSuspend(SuspendReason::TimeoutReached { timeout_secs: 10 })
         );
         assert!(!engine.is_monitoring);
+    }
+
+    #[test]
+    fn test_unknown_lid_does_not_trigger_monitoring() {
+        let mut engine = WatchdogEngine::new(Config::default());
+        let action = engine.tick(PowerSource::Battery, LidState::Unknown, false, Some(40.0));
+        assert_eq!(action, WatchdogAction::None);
+        assert!(!engine.is_monitoring);
+    }
+
+    #[test]
+    fn test_unknown_power_does_not_trigger_monitoring() {
+        let mut engine = WatchdogEngine::new(Config::default());
+        let action = engine.tick(PowerSource::Unknown, LidState::Closed, false, Some(40.0));
+        assert_eq!(action, WatchdogAction::None);
+        assert!(!engine.is_monitoring);
+    }
+
+    #[test]
+    fn test_external_monitor_bypasses_timeout_for_clamshell_desk() {
+        let mut config = Config::default();
+        config.check_interval_secs = 5;
+        config.max_timeout_secs = 10;
+        let mut engine = WatchdogEngine::new(config);
+
+        // Start monitoring on battery with closed lid
+        let _ = engine.tick(PowerSource::Battery, LidState::Closed, true, Some(40.0));
+
+        // Advance past max_timeout with external monitor connected
+        let _ = engine.tick(PowerSource::Battery, LidState::Closed, true, Some(40.0));
+        let action = engine.tick(PowerSource::Battery, LidState::Closed, true, Some(40.0));
+
+        // Must NOT suspend since user is working on external monitor in clamshell mode
+        assert_eq!(action, WatchdogAction::None);
     }
 }

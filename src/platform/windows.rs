@@ -28,8 +28,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     IDI_APPLICATION, IDI_SHIELD, MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND, MB_TOPMOST,
     MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING, MF_UNCHECKED, PBT_POWERSETTINGCHANGE,
     PM_REMOVE, SM_CMONITORS, SW_SHOW, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_APP,
-    WM_DESTROY, WM_ENDSESSION, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_POWERBROADCAST, WM_RBUTTONUP,
-    WNDCLASSW,
+    WM_CLOSE, WM_DESTROY, WM_ENDSESSION, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_POWERBROADCAST,
+    WM_RBUTTONUP, WNDCLASSW,
 };
 
 // Global atomics updated by native Win32 power broadcast events:
@@ -235,7 +235,7 @@ fn show_status_dialog() {
 
         let body = format!(
             "=========================================\r\n\
-             🛡️ SleepSafe v0.1.2\r\n\
+             🛡️ SleepSafe v0.1.3\r\n\
              Protección contra Backpack Oven Syndrome\r\n\
              =========================================\r\n\r\n\
              ESTADO ACTUAL DE LOS SENSORES:\r\n\
@@ -414,7 +414,7 @@ unsafe extern "system" fn power_wnd_proc(
 
                 // Header
                 let title_str = format!(
-                    "SleepSafe v0.1.2 ({})",
+                    "SleepSafe v0.1.3 ({})",
                     if is_paused {
                         "Pausado"
                     } else if is_monitoring {
@@ -620,41 +620,44 @@ unsafe extern "system" fn power_wnd_proc(
         let setting_ptr = lparam.0 as *const POWERBROADCAST_SETTING;
         if !setting_ptr.is_null() {
             let setting = &*setting_ptr;
-            let val = *(setting.Data.as_ptr() as *const u32);
+            if setting.DataLength as usize >= std::mem::size_of::<u32>() {
+                let val = *(setting.Data.as_ptr() as *const u32);
 
-            if setting.PowerSetting == GUID_LIDSWITCH_STATE_CHANGE {
-                // 0 = Closed, 1 = Open (DWORD)
-                let state = if val == 0 { 0 } else { 1 };
-                GLOBAL_LID_STATE.store(state, Ordering::SeqCst);
-                log_info!(
-                    "Win32 Power Event: Lid state changed to {}",
-                    if state == 0 { "CLOSED" } else { "OPEN" }
-                );
-                update_tray_tooltip_dynamic();
-            } else if setting.PowerSetting == GUID_ACDC_POWER_SOURCE {
-                // Win32 SYSTEM_POWER_CONDITION enum:
-                // PoAc = 0 (AC connected)
-                // PoDc = 1 (DC / Battery active)
-                // PoHot = 2 (Hot-swap battery)
-                let state = match val {
-                    0 => 1, // 1 = Ac in our internal state
-                    _ => 0, // 0 = Battery in our internal state
-                };
-                GLOBAL_POWER_STATE.store(state, Ordering::SeqCst);
-                log_info!(
-                    "Win32 Power Event: Power source changed to {}",
-                    if state == 1 { "AC" } else { "BATTERY" }
-                );
-                update_tray_tooltip_dynamic();
+                if setting.PowerSetting == GUID_LIDSWITCH_STATE_CHANGE {
+                    // 0 = Closed, 1 = Open (DWORD)
+                    let state = if val == 0 { 0 } else { 1 };
+                    GLOBAL_LID_STATE.store(state, Ordering::SeqCst);
+                    log_info!(
+                        "Win32 Power Event: Lid state changed to {}",
+                        if state == 0 { "CLOSED" } else { "OPEN" }
+                    );
+                    update_tray_tooltip_dynamic();
+                } else if setting.PowerSetting == GUID_ACDC_POWER_SOURCE {
+                    // Win32 SYSTEM_POWER_CONDITION enum:
+                    // PoAc = 0 (AC connected)
+                    // PoDc = 1 (DC / Battery active)
+                    // PoHot = 2 (Hot-swap battery)
+                    let state = match val {
+                        0 => 1, // 1 = Ac in our internal state
+                        _ => 0, // 0 = Battery in our internal state
+                    };
+                    GLOBAL_POWER_STATE.store(state, Ordering::SeqCst);
+                    log_info!(
+                        "Win32 Power Event: Power source changed to {}",
+                        if state == 1 { "AC" } else { "BATTERY" }
+                    );
+                    update_tray_tooltip_dynamic();
+                }
             }
         }
         return LRESULT(1);
     }
 
-    // 4. Clean exit on destroy / session end
-    if msg == WM_DESTROY || msg == WM_ENDSESSION {
+    // 4. Clean exit on close, destroy or session end (Inno Setup, Restart Manager, Shutdown)
+    if msg == WM_CLOSE || msg == WM_DESTROY || msg == WM_ENDSESSION {
         remove_tray_icon();
-        return LRESULT(0);
+        log_info!("SleepSafe terminating cleanly via window event (0x{:X}).", msg);
+        std::process::exit(0);
     }
 
     DefWindowProcW(hwnd, msg, wparam, lparam)

@@ -1,6 +1,6 @@
 [package]
 name = "sleepsafe"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["elmiranda-cl"]
 description = "Intelligent thermal and closed-lid sleep protection for Windows laptops"

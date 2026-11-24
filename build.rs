@@ -23,7 +23,20 @@ fn main() {
         }
 
         if !compiled {
-            println!("cargo:warning=windres not found or failed; Windows resources not embedded");
+            let res_file = format!("{}/sleepsafe.res", out_dir);
+            if let Ok(status) = Command::new("rc.exe")
+                .args(["/fo", &res_file, "sleepsafe.rc"])
+                .status()
+            {
+                if status.success() {
+                    compiled = true;
+                    println!("cargo:rustc-link-arg={}", res_file);
+                }
+            }
+        }
+
+        if !compiled {
+            println!("cargo:warning=Resource compiler (windres/rc.exe) not found or failed; Windows resources not embedded");
         }
 
         println!("cargo:rerun-if-changed=sleepsafe.rc");

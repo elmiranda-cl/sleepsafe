@@ -16,13 +16,16 @@ use watchdog::WatchdogEngine;
 #[cfg(windows)]
 fn acquire_single_instance_lock() -> Option<windows::Win32::Foundation::HANDLE> {
     use windows::core::w;
-    use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, HANDLE};
+    use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE};
     use windows::Win32::System::Threading::CreateMutexW;
     use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
 
     unsafe {
         let mutex = CreateMutexW(None, true, w!("Local\\SleepSafe_SingleInstance_Mutex"));
         if GetLastError() == ERROR_ALREADY_EXISTS {
+            if let Ok(h) = mutex {
+                let _ = CloseHandle(h);
+            }
             let _ = MessageBoxW(
                 None,
                 w!("SleepSafe ya se encuentra en ejecución en segundo plano.\n\nPuedes ver su estado o configurar opciones haciendo clic en el icono de escudo junto al reloj (bandeja del sistema)."),
@@ -52,7 +55,7 @@ fn main() {
         }
     };
 
-    log_info!("SleepSafe v0.1.2 started. Initializing configuration and hardware providers.");
+    log_info!("SleepSafe v0.1.3 started. Initializing configuration and hardware providers.");
 
     let config = Config::load();
     let provider = DefaultProvider::new();
