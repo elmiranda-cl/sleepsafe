@@ -22,7 +22,7 @@ LicenseFile=..\LICENSE
 OutputDir=..\dist
 OutputBaseFilename=sleepsafe-setup
 SetupIconFile=..\assets\sleepsafe.ico
-Compression=lzma2/ultra64
+Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
@@ -39,7 +39,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "autostart"; Description: "Iniciar SleepSafe automáticamente al encender el equipo"; GroupDescription: "Opciones de Inicio:"; Flags: checkedonce
 
 [Files]
-Source: "..\target\x86_64-pc-windows-gnu\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\x86_64-pc-windows-msvc\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\sleepsafe.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
