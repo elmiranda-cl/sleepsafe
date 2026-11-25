@@ -6,6 +6,8 @@
 
 > Intelligent thermal and closed-lid sleep protection for Windows laptops.
 
+[Leer en Español](README.es.md)
+
 ## What is SleepSafe?
 
 On Windows laptops, when you configure **"When I close the lid: Do nothing"** while connected to AC power, Windows fails to re-evaluate the lid state if the charger is later disconnected or if a power outage occurs.
